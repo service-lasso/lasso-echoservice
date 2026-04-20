@@ -2,16 +2,19 @@
   "id": "echo-service",
   "name": "Echo Service",
   "description": "Go-based harness service used for Service Lasso integration, runtime hardening, and supervision testing.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "enabled": true,
   "executable": "go",
   "args": ["run", "."],
   "env": {
     "ECHO_MESSAGE": "hello from echo-service harness",
     "ECHO_PORT": "4010",
+    "ECHO_HTTP_HEALTH_PORT": "4011",
+    "ECHO_TCP_PORT": "4012",
     "ECHO_LOG_PATH": "./runtime/echo.log",
     "ECHO_STATE_PATH": "./runtime/state.json",
-    "ECHO_DB_PATH": "./runtime/echo.sqlite"
+    "ECHO_DB_PATH": "./runtime/echo.sqlite",
+    "SERVICE_LASSO_GLOBAL_ENV_JSON": "{\"ECHO_ENV_CHANNEL\":\"demo\"}"
   },
   "urls": [
     {
@@ -22,6 +25,11 @@
     {
       "label": "service",
       "url": "http://127.0.0.1:4010/health",
+      "kind": "local"
+    },
+    {
+      "label": "http-health",
+      "url": "http://127.0.0.1:4011/health",
       "kind": "local"
     }
   ],

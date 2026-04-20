@@ -29,6 +29,8 @@ type contract struct {
 		Logs      bool `json:"logs"`
 		State     bool `json:"state"`
 		SQLite    bool `json:"sqlite"`
+		Stdout    bool `json:"stdout"`
+		Stderr    bool `json:"stderr"`
 		ExitClean bool `json:"exitClean"`
 	} `json:"expect"`
 	API struct {
@@ -51,6 +53,7 @@ type summary struct {
 	SQLiteRows   int               `json:"sqliteRows"`
 	LastAction   string            `json:"lastAction"`
 	ChildActions []string          `json:"childActions"`
+	HealthTargets map[string]string `json:"healthTargets"`
 }
 
 type stateResponse struct {
@@ -68,11 +71,9 @@ type stateResponse struct {
 	} `json:"children"`
 }
 
-type sqliteResponse struct {
-	Events []struct {
-		Kind   string `json:"kind"`
-		Detail string `json:"detail"`
-	} `json:"events"`
+type verifierTargets struct {
+	httpHealthURL string
+	tcpAddress    string
 }
 
 func main() {
@@ -102,6 +103,14 @@ func run(contractPath, outputDir string) error {
 	}
 
 	port, err := findFreePort()
+	if err != nil {
+		return err
+	}
+	httpHealthPort, err := findFreePort()
+	if err != nil {
+		return err
+	}
+	tcpPort, err := findFreePort()
 	if err != nil {
 		return err
 	}
@@ -138,6 +147,10 @@ func run(contractPath, outputDir string) error {
 		"ECHO_LOG_PATH="+logPath,
 		"ECHO_STATE_PATH="+statePath,
 		"ECHO_DB_PATH="+dbPath,
+		"ECHO_HTTP_HEALTH_PORT="+httpHealthPort,
+		"ECHO_TCP_PORT="+tcpPort,
+		`SERVICE_LASSO_GLOBAL_ENV_JSON={"VERIFY":"true","CHANNEL":"ci"}`,
+		"SERVICE_LASSO_GLOBAL_REGION=ci",
 	)
 
 	if err := cmd.Start(); err != nil {
@@ -145,6 +158,11 @@ func run(contractPath, outputDir string) error {
 	}
 
 	baseURL := "http://127.0.0.1:" + port
+	targets := verifierTargets{
+		httpHealthURL: fmt.Sprintf("http://127.0.0.1:%s/health", httpHealthPort),
+		tcpAddress:    fmt.Sprintf("127.0.0.1:%s", tcpPort),
+	}
+
 	timeout := time.Duration(doc.Health.TimeoutSeconds)
 	if timeout <= 0 {
 		timeout = 30
@@ -155,7 +173,7 @@ func run(contractPath, outputDir string) error {
 		return err
 	}
 
-	verified := make([]string, 0, len(doc.API.Endpoints)+len(doc.API.Actions)+6)
+	verified := make([]string, 0, len(doc.API.Endpoints)+len(doc.API.Actions)+8)
 	for _, endpoint := range doc.API.Endpoints {
 		if err := verifyEndpoint(baseURL, endpoint); err != nil {
 			_ = cmd.Process.Kill()
@@ -167,7 +185,7 @@ func run(contractPath, outputDir string) error {
 
 	childActions := []string{}
 	for _, action := range doc.API.Actions {
-		childInfo, err := verifyAction(baseURL, action)
+		childInfo, err := verifyAction(baseURL, targets, action)
 		if err != nil {
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
@@ -209,7 +227,15 @@ func run(contractPath, outputDir string) error {
 	}
 
 	if doc.Expect.Logs {
-		if err := ensureFileContains(logPath, []string{"verify-log", "verify-state", "verify-sqlite"}); err != nil {
+		if err := ensureFileContains(logPath, []string{
+			"verify-log",
+			"verify-state",
+			"verify-sqlite",
+			"verify-stdout",
+			"verify-stderr",
+			"http-health",
+			"tcp-health",
+		}); err != nil {
 			_ = cmd.Process.Kill()
 			_, _ = cmd.Process.Wait()
 			return err
@@ -224,6 +250,24 @@ func run(contractPath, outputDir string) error {
 			return fmt.Errorf("state file missing: %w", err)
 		}
 		verified = append(verified, "state")
+	}
+
+	if doc.Expect.Stdout {
+		if err := ensureFileContains(stdoutPath, []string{"verify-stdout"}); err != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+			return err
+		}
+		verified = append(verified, "stdout")
+	}
+
+	if doc.Expect.Stderr {
+		if err := ensureFileContains(stderrPath, []string{"verify-stderr"}); err != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+			return err
+		}
+		verified = append(verified, "stderr")
 	}
 
 	if err := closeHarness(baseURL); err != nil {
@@ -248,6 +292,7 @@ func run(contractPath, outputDir string) error {
 			SQLiteRows:   sqliteRows,
 			LastAction:   state.LastAction,
 			ChildActions: childActions,
+			HealthTargets: map[string]string{"http": targets.httpHealthURL, "tcp": targets.tcpAddress},
 		}
 		if err := writeJSON(filepath.Join(outputDir, "summary.json"), report); err != nil {
 			return err
@@ -323,52 +368,44 @@ func verifyEndpoint(baseURL, endpoint string) error {
 	return nil
 }
 
-func verifyAction(baseURL, action string) (string, error) {
-	var body string
+func verifyAction(baseURL string, targets verifierTargets, action string) (string, error) {
 	switch action {
 	case "write-log":
-		body = `{"message":"verify-log"}`
+		return "", postActionExpect(baseURL, action, `{"message":"verify-log"}`, http.StatusOK)
 	case "write-state":
-		body = `{"message":"verify-state"}`
+		return "", postActionExpect(baseURL, action, `{"message":"verify-state"}`, http.StatusOK)
 	case "write-sqlite":
-		body = `{"message":"verify-sqlite"}`
-	case "fork-child":
-		body = `{"name":"verify-fork-child"}`
-	case "start-child":
-		body = `{"name":"verify-running-child"}`
+		return "", postActionExpect(baseURL, action, `{"message":"verify-sqlite"}`, http.StatusOK)
+	case "write-stdout":
+		return "", postActionExpect(baseURL, action, `{"message":"verify-stdout"}`, http.StatusOK)
+	case "write-stderr":
+		return "", postActionExpect(baseURL, action, `{"message":"verify-stderr"}`, http.StatusOK)
 	case "error":
-		body = `{"message":"verify-error"}`
-	default:
-		return "", fmt.Errorf("unsupported verification action: %s", action)
-	}
-
-	response, err := http.Post(baseURL+"/action/"+action, "application/json", strings.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("POST /action/%s failed: %w", action, err)
-	}
-	defer response.Body.Close()
-
-	if action == "error" {
-		if response.StatusCode != http.StatusInternalServerError {
-			return "", fmt.Errorf("POST /action/%s returned %d, expected 500", action, response.StatusCode)
+		return "", postActionExpect(baseURL, action, `{"message":"verify-error"}`, http.StatusInternalServerError)
+	case "fork-child":
+		if err := postActionExpect(baseURL, action, `{"name":"verify-fork-child"}`, http.StatusOK); err != nil {
+			return "", err
 		}
-		return "", nil
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("POST /action/%s returned %d", action, response.StatusCode)
-	}
-
-	if action == "fork-child" || action == "start-child" {
 		state, err := fetchState(baseURL)
 		if err != nil {
 			return "", err
 		}
 		for _, child := range state.Children {
-			if child.Name == "verify-fork-child" && action == "fork-child" {
+			if child.Name == "verify-fork-child" {
 				return "fork-child", waitForChildExit(baseURL, child.Name, 5*time.Second)
 			}
-			if child.Name == "verify-running-child" && action == "start-child" {
+		}
+		return "", fmt.Errorf("fork-child did not appear in state children")
+	case "start-child":
+		if err := postActionExpect(baseURL, action, `{"name":"verify-running-child"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		state, err := fetchState(baseURL)
+		if err != nil {
+			return "", err
+		}
+		for _, child := range state.Children {
+			if child.Name == "verify-running-child" {
 				if child.PID <= 0 {
 					return "", fmt.Errorf("start-child did not return a valid pid")
 				}
@@ -380,10 +417,68 @@ func verifyAction(baseURL, action string) (string, error) {
 				return "start-child", waitForChildExit(baseURL, child.Name, 5*time.Second)
 			}
 		}
-		return "", fmt.Errorf("action %s did not appear in state children", action)
+		return "", fmt.Errorf("start-child did not appear in state children")
+	case "http-health":
+		if err := postActionExpect(baseURL, action, `{"mode":"healthy","message":"verify http healthy"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForDedicatedHTTPStatus(targets.httpHealthURL, http.StatusOK, `"status":"ok"`); err != nil {
+			return "", err
+		}
+		if err := postActionExpect(baseURL, action, `{"mode":"error","message":"verify http error"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForDedicatedHTTPStatus(targets.httpHealthURL, http.StatusInternalServerError, `"status":"error"`); err != nil {
+			return "", err
+		}
+		if err := postActionExpect(baseURL, action, `{"mode":"stopped","message":"verify http stopped"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForDedicatedHTTPUnavailable(targets.httpHealthURL); err != nil {
+			return "", err
+		}
+		return "http-health", postActionExpect(baseURL, action, `{"mode":"healthy","message":"verify http restore"}`, http.StatusOK)
+	case "tcp-health":
+		if err := postActionExpect(baseURL, action, `{"mode":"healthy","message":"verify tcp healthy"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForTCPPayload(targets.tcpAddress, "OK"); err != nil {
+			return "", err
+		}
+		if err := postActionExpect(baseURL, action, `{"mode":"error","message":"verify tcp error"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForTCPPayload(targets.tcpAddress, "ERROR"); err != nil {
+			return "", err
+		}
+		if err := postActionExpect(baseURL, action, `{"mode":"stopped","message":"verify tcp stopped"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForTCPUnavailable(targets.tcpAddress); err != nil {
+			return "", err
+		}
+		if err := postActionExpect(baseURL, action, `{"mode":"healthy","message":"verify tcp restore"}`, http.StatusOK); err != nil {
+			return "", err
+		}
+		if err := waitForTCPPayload(targets.tcpAddress, "OK"); err != nil {
+			return "", err
+		}
+		return "tcp-health", nil
+	default:
+		return "", fmt.Errorf("unsupported verification action: %s", action)
 	}
+}
 
-	return "", nil
+func postActionExpect(baseURL, action, body string, expectedStatus int) error {
+	response, err := http.Post(baseURL+"/action/"+action, "application/json", strings.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("POST /action/%s failed: %w", action, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != expectedStatus {
+		return fmt.Errorf("POST /action/%s returned %d, expected %d", action, response.StatusCode, expectedStatus)
+	}
+	return nil
 }
 
 func fetchState(baseURL string) (stateResponse, error) {
@@ -414,6 +509,68 @@ func waitForChildExit(baseURL, name string, timeout time.Duration) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("child %s did not exit within %s", name, timeout)
+}
+
+func waitForDedicatedHTTPStatus(url string, expectedStatus int, expectedText string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := http.Get(url)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr == nil && response.StatusCode == expectedStatus && strings.Contains(string(body), expectedText) {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("dedicated HTTP health %s did not return %d with %q", url, expectedStatus, expectedText)
+}
+
+func waitForDedicatedHTTPUnavailable(url string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_, err := http.Get(url)
+		if err != nil {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("dedicated HTTP health %s remained reachable", url)
+}
+
+func waitForTCPPayload(address string, expected string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		connection, err := net.DialTimeout("tcp", address, time.Second)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		_ = connection.SetDeadline(time.Now().Add(time.Second))
+		body, readErr := io.ReadAll(connection)
+		connection.Close()
+		if readErr == nil && strings.Contains(string(body), expected) {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("TCP health %s did not yield %q", address, expected)
+}
+
+func waitForTCPUnavailable(address string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		connection, err := net.DialTimeout("tcp", address, 250*time.Millisecond)
+		if err != nil {
+			return nil
+		}
+		connection.Close()
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("TCP health %s remained reachable", address)
 }
 
 func countSQLiteRows(path string) (int, error) {

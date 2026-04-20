@@ -8,19 +8,30 @@
     "logs": true,
     "state": true,
     "sqlite": true,
+    "stdout": true,
+    "stderr": true,
     "exitClean": true
   },
   "api": {
     "endpoints": [
       "/health",
+      "/health/http",
+      "/health/tcp",
       "/state",
       "/logs",
-      "/sqlite"
+      "/sqlite",
+      "/env",
+      "/global-env",
+      "/service-lasso/output"
     ],
     "actions": [
       "write-log",
       "write-state",
       "write-sqlite",
+      "write-stdout",
+      "write-stderr",
+      "http-health",
+      "tcp-health",
       "error",
       "fork-child",
       "start-child"

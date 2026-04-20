@@ -14,3 +14,9 @@ Key files:
 
 This service is intentionally harness-oriented.
 It exists to support runtime integration, supervision, persistence, and demo verification rather than end-user product behavior.
+
+Current harness-specific surfaces include:
+- dedicated HTTP and TCP health targets for realistic health-probe testing
+- env and global-env reporting endpoints
+- a Service Lasso oriented output endpoint at `GET /service-lasso/output`
+- stdout and stderr emission actions for log-capture testing

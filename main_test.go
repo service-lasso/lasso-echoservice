@@ -56,6 +56,7 @@ func newTestHarnessAppWithEnv(t *testing.T, extraEnv map[string]string) *harness
 				}
 			}
 		}
+		app.closeHealthServers()
 		if app.httpServer != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			_ = app.httpServer.Shutdown(ctx)
@@ -184,6 +185,59 @@ func waitForHTTPReady(t *testing.T, baseURL string) {
 	})
 }
 
+func waitForDedicatedHTTPStatus(t *testing.T, url string, expectedStatus int, expectedText string) {
+	t.Helper()
+	waitForCondition(t, 5*time.Second, func() bool {
+		response, err := http.Get(url)
+		if err != nil {
+			return false
+		}
+		defer response.Body.Close()
+		body, readErr := io.ReadAll(response.Body)
+		if readErr != nil {
+			return false
+		}
+		return response.StatusCode == expectedStatus && strings.Contains(string(body), expectedText)
+	})
+}
+
+func waitForDedicatedHTTPUnavailable(t *testing.T, url string) {
+	t.Helper()
+	waitForCondition(t, 5*time.Second, func() bool {
+		_, err := http.Get(url)
+		return err != nil
+	})
+}
+
+func waitForTCPPayload(t *testing.T, address string, expected string) {
+	t.Helper()
+	waitForCondition(t, 5*time.Second, func() bool {
+		connection, err := net.DialTimeout("tcp", address, time.Second)
+		if err != nil {
+			return false
+		}
+		defer connection.Close()
+		_ = connection.SetDeadline(time.Now().Add(time.Second))
+		body, readErr := io.ReadAll(connection)
+		if readErr != nil {
+			return false
+		}
+		return strings.Contains(string(body), expected)
+	})
+}
+
+func waitForTCPUnavailable(t *testing.T, address string) {
+	t.Helper()
+	waitForCondition(t, 5*time.Second, func() bool {
+		connection, err := net.DialTimeout("tcp", address, 250*time.Millisecond)
+		if err == nil {
+			connection.Close()
+			return false
+		}
+		return true
+	})
+}
+
 func TestNewHarnessAppPersistsStartupState(t *testing.T) {
 	app := newTestHarnessApp(t)
 
@@ -294,6 +348,159 @@ func TestErrorActionPersistsLastError(t *testing.T) {
 	}
 	if snapshot.LastAction != "error" {
 		t.Fatalf("unexpected lastAction: %s", snapshot.LastAction)
+	}
+}
+
+func TestEnvAndServiceLassoOutputExposeGlobalEnv(t *testing.T) {
+	app := newTestHarnessAppWithEnv(t, map[string]string{
+		"SERVICE_LASSO_GLOBAL_ENV_JSON": `{"API_URL":"http://localhost:9000","TOKEN":"secret-token"}`,
+		"SERVICE_LASSO_GLOBAL_REGION":   "apac",
+		"GLOBAL_SHARED":                 "shared-value",
+	})
+
+	envResponse := getJSON(t, app.handleEnv)
+	if envResponse.Code != http.StatusOK {
+		t.Fatalf("env returned %d", envResponse.Code)
+	}
+	var envBody map[string]any
+	if err := json.Unmarshal(envResponse.Body.Bytes(), &envBody); err != nil {
+		t.Fatalf("decode env body failed: %v", err)
+	}
+	serviceEnv, ok := envBody["serviceEnv"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing serviceEnv section")
+	}
+	if serviceEnv["ECHO_HTTP_HEALTH_PORT"] == "" || serviceEnv["ECHO_TCP_PORT"] == "" {
+		t.Fatalf("expected health ports in serviceEnv")
+	}
+
+	globalResponse := getJSON(t, app.handleGlobalEnv)
+	if globalResponse.Code != http.StatusOK {
+		t.Fatalf("global-env returned %d", globalResponse.Code)
+	}
+	var globalBody map[string]any
+	if err := json.Unmarshal(globalResponse.Body.Bytes(), &globalBody); err != nil {
+		t.Fatalf("decode global-env body failed: %v", err)
+	}
+
+	globalEnv, ok := globalBody["globalEnv"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing globalEnv section")
+	}
+	if globalEnv["API_URL"] != "http://localhost:9000" {
+		t.Fatalf("unexpected API_URL value: %#v", globalEnv["API_URL"])
+	}
+	if globalEnv["REGION"] != "apac" {
+		t.Fatalf("unexpected REGION value: %#v", globalEnv["REGION"])
+	}
+	if globalEnv["SHARED"] != "shared-value" {
+		t.Fatalf("unexpected SHARED value: %#v", globalEnv["SHARED"])
+	}
+
+	serviceLassoResponse := getJSON(t, app.handleServiceLassoOutput)
+	if serviceLassoResponse.Code != http.StatusOK {
+		t.Fatalf("service-lasso/output returned %d", serviceLassoResponse.Code)
+	}
+	var serviceLassoBody map[string]any
+	if err := json.Unmarshal(serviceLassoResponse.Body.Bytes(), &serviceLassoBody); err != nil {
+		t.Fatalf("decode service-lasso/output body failed: %v", err)
+	}
+	if serviceLassoBody["serviceId"] != "echo-service" {
+		t.Fatalf("unexpected serviceId: %#v", serviceLassoBody["serviceId"])
+	}
+
+	healthTargets, ok := serviceLassoBody["healthTargets"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing healthTargets")
+	}
+	if _, ok := healthTargets["http"].(map[string]any); !ok {
+		t.Fatalf("missing http health target")
+	}
+	if _, ok := healthTargets["tcp"].(map[string]any); !ok {
+		t.Fatalf("missing tcp health target")
+	}
+}
+
+func TestStdoutStderrAndHealthControls(t *testing.T) {
+	httpHealthPort := findFreePort(t)
+	tcpHealthPort := findFreePort(t)
+	app := newTestHarnessAppWithEnv(t, map[string]string{
+		"ECHO_HTTP_HEALTH_PORT": httpHealthPort,
+		"ECHO_TCP_PORT":         tcpHealthPort,
+	})
+
+	var stdoutBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer
+	app.stdout = &stdoutBuffer
+	app.stderr = &stderrBuffer
+
+	stdoutResponse := postJSON(t, app.handleWriteStdout, actionRequest{Message: "stdout proof"})
+	if stdoutResponse.Code != http.StatusOK {
+		t.Fatalf("write-stdout returned %d", stdoutResponse.Code)
+	}
+	stderrResponse := postJSON(t, app.handleWriteStderr, actionRequest{Message: "stderr proof"})
+	if stderrResponse.Code != http.StatusOK {
+		t.Fatalf("write-stderr returned %d", stderrResponse.Code)
+	}
+	if !strings.Contains(stdoutBuffer.String(), "stdout proof") {
+		t.Fatalf("stdout output missing proof text")
+	}
+	if !strings.Contains(stderrBuffer.String(), "stderr proof") {
+		t.Fatalf("stderr output missing proof text")
+	}
+
+	httpURL := fmt.Sprintf("http://127.0.0.1:%s/health", httpHealthPort)
+	tcpAddress := fmt.Sprintf("127.0.0.1:%s", tcpHealthPort)
+
+	httpHealthy := postJSON(t, app.handleHTTPHealthAction, actionRequest{Mode: "healthy", Message: "http healthy"})
+	if httpHealthy.Code != http.StatusOK {
+		t.Fatalf("http-health healthy returned %d", httpHealthy.Code)
+	}
+	waitForDedicatedHTTPStatus(t, httpURL, http.StatusOK, `"status":"ok"`)
+
+	httpError := postJSON(t, app.handleHTTPHealthAction, actionRequest{Mode: "error", Message: "http error"})
+	if httpError.Code != http.StatusOK {
+		t.Fatalf("http-health error returned %d", httpError.Code)
+	}
+	waitForDedicatedHTTPStatus(t, httpURL, http.StatusInternalServerError, `"status":"error"`)
+
+	httpStopped := postJSON(t, app.handleHTTPHealthAction, actionRequest{Mode: "stopped", Message: "http stopped"})
+	if httpStopped.Code != http.StatusOK {
+		t.Fatalf("http-health stopped returned %d", httpStopped.Code)
+	}
+	waitForDedicatedHTTPUnavailable(t, httpURL)
+
+	tcpHealthy := postJSON(t, app.handleTCPHealthAction, actionRequest{Mode: "healthy", Message: "tcp healthy"})
+	if tcpHealthy.Code != http.StatusOK {
+		t.Fatalf("tcp-health healthy returned %d", tcpHealthy.Code)
+	}
+	waitForTCPPayload(t, tcpAddress, "OK")
+
+	tcpError := postJSON(t, app.handleTCPHealthAction, actionRequest{Mode: "error", Message: "tcp error"})
+	if tcpError.Code != http.StatusOK {
+		t.Fatalf("tcp-health error returned %d", tcpError.Code)
+	}
+	waitForTCPPayload(t, tcpAddress, "ERROR")
+
+	tcpStopped := postJSON(t, app.handleTCPHealthAction, actionRequest{Mode: "stopped", Message: "tcp stopped"})
+	if tcpStopped.Code != http.StatusOK {
+		t.Fatalf("tcp-health stopped returned %d", tcpStopped.Code)
+	}
+	waitForTCPUnavailable(t, tcpAddress)
+
+	logs := getJSON(t, app.handleLogs)
+	if logs.Code != http.StatusOK {
+		t.Fatalf("logs returned %d", logs.Code)
+	}
+	var logsBody map[string]any
+	if err := json.Unmarshal(logs.Body.Bytes(), &logsBody); err != nil {
+		t.Fatalf("decode logs body failed: %v", err)
+	}
+	content := logsBody["content"].(string)
+	for _, needle := range []string{"stdout proof", "stderr proof", "http stopped", "tcp stopped"} {
+		if !strings.Contains(content, needle) {
+			t.Fatalf("expected logs to contain %q", needle)
+		}
 	}
 }
 
@@ -510,6 +717,7 @@ func TestServiceManifestMatchesHarnessContract(t *testing.T) {
 		t.Fatalf("unexpected healthcheck type: %s", manifest.Healthcheck.Type)
 	}
 	requiredEnv := []string{"ECHO_PORT", "ECHO_LOG_PATH", "ECHO_STATE_PATH", "ECHO_DB_PATH"}
+	requiredEnv = append(requiredEnv, "ECHO_HTTP_HEALTH_PORT", "ECHO_TCP_PORT")
 	for _, key := range requiredEnv {
 		if manifest.Env[key] == "" {
 			t.Fatalf("missing required env %s", key)
@@ -525,6 +733,10 @@ func TestServiceManifestMatchesHarnessContract(t *testing.T) {
 		Health    struct {
 			Type string `json:"type"`
 		} `json:"health"`
+		API struct {
+			Endpoints []string `json:"endpoints"`
+			Actions   []string `json:"actions"`
+		} `json:"api"`
 	}
 	if err := json.Unmarshal(rawContract, &contract); err != nil {
 		t.Fatalf("decode service-harness.json failed: %v", err)
@@ -534,6 +746,16 @@ func TestServiceManifestMatchesHarnessContract(t *testing.T) {
 	}
 	if contract.Health.Type != "process" {
 		t.Fatalf("unexpected contract health type: %s", contract.Health.Type)
+	}
+	for _, endpoint := range []string{"/env", "/global-env", "/service-lasso/output", "/health/http", "/health/tcp"} {
+		if !containsString(contract.API.Endpoints, endpoint) {
+			t.Fatalf("missing contract endpoint %s", endpoint)
+		}
+	}
+	for _, action := range []string{"write-stdout", "write-stderr", "http-health", "tcp-health"} {
+		if !containsString(contract.API.Actions, action) {
+			t.Fatalf("missing contract action %s", action)
+		}
 	}
 }
 
@@ -556,4 +778,13 @@ func TestSQLiteDatabaseCanBeOpenedAfterWrites(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expected one sqlite proof row, got %d", count)
 	}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
