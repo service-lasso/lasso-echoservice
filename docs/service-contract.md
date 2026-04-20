@@ -1,14 +1,16 @@
 # Service Contract
 
-This starter repo demonstrates the first-pass Service Lasso service contract.
+This repo implements the Echo Service harness as a real Service Lasso service repo.
 
-Key starter files:
+Key files:
 - `service.json` - service manifest
+- `main.go` - the Go harness service
 - `verify/service-harness.json` - harness validation contract
-- `scripts/verify.*` - thin wrappers that call the shared harness binary
-- `scripts/package.*` - reference packaging entrypoints
-- `runtime/` - sample payload/runtime files
+- `scripts/verify.*` - validation wrappers
+- `scripts/package.*` - packaging entrypoints
+- `runtime/` - generated runtime files during local runs
 - `config/` - example config inputs
 - `docs/service-json-reference.md` - one-stop reference for `service.json` fields, healthcheck setup, and first-pass contract guidance
 
-This starter is intentionally minimal. It is meant to prove the contract shape, not to be a full production service.
+This service is intentionally harness-oriented.
+It exists to support runtime integration, supervision, persistence, and demo verification rather than end-user product behavior.

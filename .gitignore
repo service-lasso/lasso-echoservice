@@ -2,3 +2,6 @@
 dist/
 output/
 verify/service-harness.ci.json
+runtime/
+echo-service
+echo-service.exe

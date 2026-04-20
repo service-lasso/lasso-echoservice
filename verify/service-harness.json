@@ -1,16 +1,5 @@
 {
   "serviceId": "echo-service",
-  "artifact": {
-    "path": "dist/echo-service-win32.zip",
-    "kind": "archive"
-  },
-  "dependencies": [],
-  "lifecycle": {
-    "install": true,
-    "config": true,
-    "start": true,
-    "stop": true
-  },
   "health": {
     "type": "process",
     "timeoutSeconds": 30
@@ -18,7 +7,24 @@
   "expect": {
     "logs": true,
     "state": true,
+    "sqlite": true,
     "exitClean": true
+  },
+  "api": {
+    "endpoints": [
+      "/health",
+      "/state",
+      "/logs",
+      "/sqlite"
+    ],
+    "actions": [
+      "write-log",
+      "write-state",
+      "write-sqlite",
+      "error",
+      "fork-child",
+      "start-child"
+    ]
   },
   "artifacts": {
     "captureLogs": true,
