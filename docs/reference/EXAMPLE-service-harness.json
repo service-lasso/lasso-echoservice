@@ -1,0 +1,28 @@
+{
+  "serviceId": "echo-service",
+  "artifact": {
+    "path": "dist/echo-service-win32.zip",
+    "kind": "archive"
+  },
+  "dependencies": [],
+  "lifecycle": {
+    "install": true,
+    "config": true,
+    "start": true,
+    "stop": true
+  },
+  "health": {
+    "type": "process",
+    "timeoutSeconds": 30
+  },
+  "expect": {
+    "logs": true,
+    "state": true,
+    "exitClean": true
+  },
+  "artifacts": {
+    "captureLogs": true,
+    "captureState": true,
+    "captureSummary": true
+  }
+}

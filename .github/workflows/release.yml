@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SERVICE_LASSO_HARNESS_REPO: service-lasso/service-lasso-harness
+  SERVICE_LASSO_HARNESS_VERSION: v0.1.1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            artifact: dist/echo-service-win32.zip
+            archive_name: service-lasso-harness-windows-amd64.zip
+            binary_name: service-lasso-harness.exe
+          - os: ubuntu-latest
+            platform: linux
+            artifact: dist/echo-service-linux.tar.gz
+            archive_name: service-lasso-harness-linux-amd64.tar.gz
+            binary_name: service-lasso-harness
+          - os: macos-14
+            platform: darwin
+            artifact: dist/echo-service-darwin.tar.gz
+            archive_name: service-lasso-harness-darwin-arm64.tar.gz
+            binary_name: service-lasso-harness
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download released service-lasso-harness binary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .harness/download .harness/bin
+          gh release download "$SERVICE_LASSO_HARNESS_VERSION" \
+            --repo "$SERVICE_LASSO_HARNESS_REPO" \
+            --pattern "${{ matrix.archive_name }}" \
+            --dir .harness/download
+
+      - name: Extract released harness binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive -Path ".harness/download/${{ matrix.archive_name }}" -DestinationPath ".harness/bin" -Force
+          $bin = Get-ChildItem ".harness/bin" -Recurse -Filter "${{ matrix.binary_name }}" | Select-Object -First 1
+          if (-not $bin) {
+            throw "Harness binary not found under .harness/bin"
+          }
+          $binDir = $bin.Directory.FullName
+          $binPath = $bin.FullName
+          Add-Content -Path $env:GITHUB_PATH -Value $binDir
+          Add-Content -Path $env:GITHUB_ENV -Value "SERVICE_LASSO_HARNESS_BIN=$binPath"
+
+      - name: Extract released harness binary (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf ".harness/download/${{ matrix.archive_name }}" -C .harness/bin
+          BIN_PATH="$(find "$PWD/.harness/bin" -type f -name "${{ matrix.binary_name }}" | head -n 1)"
+          if [[ -z "$BIN_PATH" || ! -x "$BIN_PATH" ]]; then
+            echo "Harness binary not found under .harness/bin" >&2
+            exit 1
+          fi
+          BIN_DIR="$(dirname "$BIN_PATH")"
+          echo "$BIN_DIR" >> "$GITHUB_PATH"
+          echo "SERVICE_LASSO_HARNESS_BIN=$BIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Validate template (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\test.ps1
+
+      - name: Validate template (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/test.sh
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\package.ps1
+
+      - name: Package artifact (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/package.sh
+
+      - name: Verify via released harness (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\verify.ps1
+
+      - name: Verify via released harness (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/verify.sh
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: echo-service-${{ matrix.platform }}
+          path: ${{ matrix.artifact }}
+
+      - name: Upload verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-${{ matrix.platform }}
+          path: output/verify
+          if-no-files-found: warn
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: echo-service-*
+          merge-multiple: true
+
+      - name: Copy service manifest into release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp service.json release-assets/service.json
+
+      - name: Compute release version
+        id: version
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          version="$(date -u +%Y.%-m.%-d)-${short_sha}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            release-assets/echo-service-win32.zip
+            release-assets/echo-service-linux.tar.gz
+            release-assets/echo-service-darwin.tar.gz
+            release-assets/service.json
+          generate_release_notes: true

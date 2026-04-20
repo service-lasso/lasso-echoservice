@@ -1,0 +1,38 @@
+{
+  "id": "echo-service",
+  "name": "Echo Service",
+  "description": "Minimal sample service used to prove the service-template contract.",
+  "enabled": true,
+  "version": "0.1.0",
+  "logoutput": true,
+  "icon": "terminal",
+  "servicetype": 50,
+  "servicelocation": 10,
+  "actions": {
+    "install": {
+      "description": "Prepare the sample runtime payload if needed."
+    },
+    "config": {
+      "description": "Materialize effective runtime config for the sample service."
+    },
+    "start": {
+      "description": "Start the sample echo service."
+    },
+    "stop": {
+      "description": "Stop the sample echo service gracefully."
+    }
+  },
+  "execconfig": {
+    "serviceorder": 100,
+    "serviceport": 0,
+    "execcwd": "runtime",
+    "executable": "echo-service",
+    "env": {
+      "ECHO_MESSAGE": "hello from service-template"
+    },
+    "depend_on": [],
+    "healthcheck": {
+      "type": "process"
+    }
+  }
+}

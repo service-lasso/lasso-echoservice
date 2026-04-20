@@ -1,0 +1,121 @@
+name: validate-template
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  SERVICE_LASSO_HARNESS_REPO: service-lasso/service-lasso-harness
+  SERVICE_LASSO_HARNESS_VERSION: v0.1.1
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            archive_name: service-lasso-harness-windows-amd64.zip
+            extracted_dir: service-lasso-harness-windows-amd64
+            binary_name: service-lasso-harness.exe
+          - os: ubuntu-latest
+            platform: linux
+            archive_name: service-lasso-harness-linux-amd64.tar.gz
+            extracted_dir: service-lasso-harness-linux-amd64
+            binary_name: service-lasso-harness
+          - os: macos-14
+            platform: darwin
+            archive_name: service-lasso-harness-darwin-arm64.tar.gz
+            extracted_dir: service-lasso-harness-darwin-arm64
+            binary_name: service-lasso-harness
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Download released service-lasso-harness binary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .harness/download .harness/bin
+          gh release download "$SERVICE_LASSO_HARNESS_VERSION" \
+            --repo "$SERVICE_LASSO_HARNESS_REPO" \
+            --pattern "${{ matrix.archive_name }}" \
+            --dir .harness/download
+
+      - name: Extract released harness binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive -Path ".harness/download/${{ matrix.archive_name }}" -DestinationPath ".harness/bin" -Force
+          $bin = Get-ChildItem ".harness/bin" -Recurse -Filter "${{ matrix.binary_name }}" | Select-Object -First 1
+          if (-not $bin) {
+            throw "Harness binary not found under .harness/bin"
+          }
+          $binDir = $bin.Directory.FullName
+          $binPath = $bin.FullName
+          Add-Content -Path $env:GITHUB_PATH -Value $binDir
+          Add-Content -Path $env:GITHUB_ENV -Value "SERVICE_LASSO_HARNESS_BIN=$binPath"
+
+      - name: Extract released harness binary (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf ".harness/download/${{ matrix.archive_name }}" -C .harness/bin
+          BIN_PATH="$(find "$PWD/.harness/bin" -type f -name "${{ matrix.binary_name }}" | head -n 1)"
+          if [[ -z "$BIN_PATH" || ! -x "$BIN_PATH" ]]; then
+            echo "Harness binary not found under .harness/bin" >&2
+            exit 1
+          fi
+          BIN_DIR="$(dirname "$BIN_PATH")"
+          echo "$BIN_DIR" >> "$GITHUB_PATH"
+          echo "SERVICE_LASSO_HARNESS_BIN=$BIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Package starter artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\package.ps1
+
+      - name: Package starter artifact (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/package.sh
+
+      - name: Run starter tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\test.ps1
+
+      - name: Run starter tests (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/test.sh
+
+      - name: Verify via released harness (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\verify.ps1
+
+      - name: Verify via released harness (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/verify.sh
+
+      - name: Upload verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-${{ matrix.platform }}
+          path: output/verify
+          if-no-files-found: warn

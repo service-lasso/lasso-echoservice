@@ -1,0 +1,116 @@
+{
+  "id": "echo-service",
+  "name": "Echo Service",
+  "description": "Minimal sample service used to prove the service-template contract.",
+  "enabled": true,
+  "version": "0.1.0",
+  "logoutput": true,
+  "icon": [
+    {
+      "provider": "lucide",
+      "name": "terminal"
+    }
+  ],
+  "servicetype": 50,
+  "servicelocation": 10,
+  "logo": [],
+  "logs": {
+    "default": {
+      "path": "logs/echo-service.log"
+    }
+  },
+  "meta": {
+    "developers": [
+      {
+        "name": "Service Lasso contributors"
+      }
+    ],
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/service-lasso/service-template.git"
+    },
+    "websiteUrl": "https://github.com/service-lasso/service-template",
+    "documentationUrl": "https://github.com/service-lasso/service-template/blob/main/README.md",
+    "issuesUrl": "https://github.com/service-lasso/service-template/issues",
+    "support": {
+      "issuesUrl": "https://github.com/service-lasso/service-template/issues"
+    },
+    "links": {
+      "repository": "https://github.com/service-lasso/service-template",
+      "issues": "https://github.com/service-lasso/service-template/issues",
+      "documentation": "https://github.com/service-lasso/service-template/blob/main/README.md"
+    },
+    "tags": [
+      "service-lasso",
+      "template",
+      "example-service"
+    ]
+  },
+  "artifact": {
+    "kind": "archive",
+    "source": {
+      "type": "github-release",
+      "repo": "service-lasso/service-template",
+      "channel": "latest"
+    },
+    "version": "0.1.0",
+    "path": {
+      "win32": "dist/echo-service-win32.zip",
+      "darwin": "dist/echo-service-darwin.tar.gz",
+      "linux": "dist/echo-service-linux.tar.gz",
+      "default": "dist/echo-service-win32.zip"
+    },
+    "updateStrategy": "replace-artifact-and-restart"
+  },
+  "actions": {
+    "install": {
+      "description": "Acquire or unpack the packaged echo-service runtime artifact.",
+      "mode": "converge-install",
+      "idempotent": true
+    },
+    "config": {
+      "description": "Materialize deployment-local echo-service config and env values.",
+      "mode": "converge-config",
+      "idempotent": true
+    },
+    "update": {
+      "description": "Apply a newer release artifact and reconcile update-time changes before restart.",
+      "mode": "converge-update",
+      "idempotent": true
+    },
+    "start": {
+      "description": "Start the sample echo service.",
+      "mode": "runtime-start",
+      "idempotent": true
+    },
+    "stop": {
+      "description": "Stop the sample echo service gracefully.",
+      "mode": "runtime-stop",
+      "idempotent": true
+    },
+    "restart": {
+      "description": "Restart the sample echo service after config or update changes.",
+      "mode": "runtime-restart",
+      "idempotent": false
+    },
+    "rollback": {
+      "description": "Restore the previously deployed artifact if an update fails validation.",
+      "mode": "state-rollback",
+      "idempotent": false
+    }
+  },
+  "execconfig": {
+    "serviceorder": 100,
+    "serviceport": 0,
+    "execcwd": "runtime",
+    "executable": "echo-service",
+    "env": {
+      "ECHO_MESSAGE": "hello from service-template"
+    },
+    "depend_on": [],
+    "healthcheck": {
+      "type": "process"
+    }
+  }
+}
