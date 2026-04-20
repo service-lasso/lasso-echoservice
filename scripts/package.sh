@@ -11,15 +11,22 @@ case "$OS_NAME" in
 esac
 STAGING="$DIST/echo-service-$PLATFORM"
 TAR_PATH="$DIST/echo-service-$PLATFORM.tar.gz"
+BINARY_PATH="$STAGING/echo-service"
 
 mkdir -p "$DIST"
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 
-cp -R "$ROOT/runtime/$PLATFORM" "$STAGING/runtime"
+(
+  cd "$ROOT"
+  go build -o "$BINARY_PATH" .
+)
+
+cp "$ROOT/service.json" "$STAGING/service.json"
+cp "$ROOT/README.md" "$STAGING/README.md"
 cp -R "$ROOT/config" "$STAGING/config"
 
-chmod +x "$STAGING/runtime/echo-service.sh" 2>/dev/null || true
+chmod +x "$BINARY_PATH"
 
 rm -f "$TAR_PATH"
 tar -czf "$TAR_PATH" -C "$STAGING" .
