@@ -103,6 +103,19 @@ jobs:
           set -euo pipefail
           cp service.json release-assets/service.json
 
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd release-assets
+            sha256sum \
+              echo-service-win32.zip \
+              echo-service-linux.tar.gz \
+              echo-service-darwin.tar.gz \
+              service.json > SHA256SUMS.txt
+          )
+
       - name: Compute release version
         id: version
         shell: bash
@@ -122,4 +135,5 @@ jobs:
             release-assets/echo-service-linux.tar.gz
             release-assets/echo-service-darwin.tar.gz
             release-assets/service.json
+            release-assets/SHA256SUMS.txt
           generate_release_notes: true
