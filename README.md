@@ -90,7 +90,7 @@ The browser UI and API can switch the dedicated HTTP/TCP health targets between:
 - `error`
 - `stopped`
 
-That makes the harness useful for future Service Lasso work on real HTTP/TCP health probing without changing the service’s primary manifest healthcheck yet.
+That makes the harness useful for future Service Lasso work on real HTTP/TCP health probing while the service manifest keeps `healthchecks[]` on the process readiness default.
 
 ## Verification
 

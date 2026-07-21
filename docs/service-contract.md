@@ -10,7 +10,7 @@ Key files:
 - `scripts/package.*` - packaging entrypoints
 - `runtime/` - generated runtime files during local runs
 - `config/` - example config inputs
-- `docs/service-json-reference.md` - one-stop reference for `service.json` fields, healthcheck setup, and first-pass contract guidance
+- `docs/service-json-reference.md` - one-stop reference for `service.json` fields, `healthchecks[]` setup, and first-pass contract guidance
 
 This service is intentionally harness-oriented.
 It exists to support runtime integration, supervision, persistence, and demo verification rather than end-user product behavior.

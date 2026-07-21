@@ -13,7 +13,7 @@ It is meant to make the template usable without forcing service authors to recon
 - `actions`
 - `execconfig`
 - env / dependencies / ports
-- healthcheck direction
+- `healthchecks[]` direction
 - examples
 - what is currently canonical vs still illustrative
 
@@ -23,7 +23,7 @@ The current template direction is:
 - **default health model = `process`**
 - other health models are used only when explicitly declared by service config
 
-Ref/code-backed donor healthcheck types observed:
+Ref/code-backed donor healthchecks[] types observed:
 - `http`
 - `tcp`
 - `file`
@@ -80,9 +80,12 @@ The current sample in this repo is:
       "ECHO_MESSAGE": "hello from service-template"
     },
     "depend_on": [],
-    "healthcheck": {
-      "type": "process"
-    }
+    "healthchecks": [
+      {
+        "id": "process-ready",
+        "type": "process"
+      }
+    ]
   }
 }
 ```
@@ -238,7 +241,7 @@ Current direction:
 - use this for services that require another service/runtime/provider first
 - keep empty for the minimal sample
 
-## Healthcheck
+## Healthchecks
 
 ### Default rule
 Current rule:
@@ -246,15 +249,18 @@ Current rule:
 
 Example:
 ```json
-"healthcheck": {
-  "type": "process"
-}
+"healthchecks": [
+  {
+    "id": "process-ready",
+    "type": "process"
+  }
+]
 ```
 
 This is the right default for a simple sample service.
 
-### Observed donor healthcheck types
-The donor runtime/code shows these healthcheck types:
+### Observed donor healthchecks[] types
+The donor runtime/code shows these healthchecks[] types:
 - `http`
 - `tcp`
 - `file`
@@ -262,66 +268,81 @@ The donor runtime/code shows these healthcheck types:
 
 `process` is the current template default direction, even though the donor code paths most explicitly surfaced in ref material are the four types above.
 
-### `process` healthcheck
+### `process` healthchecks[] item
 Use when:
 - service health is adequately represented by the process being up/running
 - you do not need a deeper readiness endpoint yet
 
 Sample:
 ```json
-"healthcheck": {
-  "type": "process"
-}
+"healthchecks": [
+  {
+    "id": "process-ready",
+    "type": "process"
+  }
+]
 ```
 
-### `http` healthcheck
+### `http` healthchecks[] item
 Use when:
 - the service exposes an HTTP readiness or health endpoint
 
 Sample:
 ```json
-"healthcheck": {
-  "type": "http",
-  "url": "http://localhost:${SERVICE_PORT}/health",
-  "expected_status": 200
-}
+"healthchecks": [
+  {
+    "id": "http-ready",
+    "type": "http",
+    "url": "http://localhost:${SERVICE_PORT}/health",
+    "expected_status": 200
+  }
+]
 ```
 
-### `tcp` healthcheck
+### `tcp` healthchecks[] item
 Use when:
 - readiness is best represented by a socket accepting connections
 
 Sample:
 ```json
-"healthcheck": {
-  "type": "tcp"
-}
+"healthchecks": [
+  {
+    "id": "tcp-ready",
+    "type": "tcp"
+  }
+]
 ```
 
 Current donor behavior suggests this relies on the configured service host/port.
 
-### `file` healthcheck
+### `file` healthchecks[] item
 Use when:
 - the service creates a file that represents successful readiness/setup
 
 Sample:
 ```json
-"healthcheck": {
-  "type": "file",
-  "file": "${SERVICE_HOME}/.state/runtime/ready.txt"
-}
+"healthchecks": [
+  {
+    "id": "ready-file",
+    "type": "file",
+    "file": "${SERVICE_HOME}/.state/runtime/ready.txt"
+  }
+]
 ```
 
-### `variable` healthcheck
+### `variable` healthchecks[] item
 Use when:
 - a specific resolved/exported variable is the readiness signal
 
 Sample:
 ```json
-"healthcheck": {
-  "type": "variable",
-  "variable": "${SERVICE_URL}"
-}
+"healthchecks": [
+  {
+    "id": "service-url-ready",
+    "type": "variable",
+    "variable": "${SERVICE_URL}"
+  }
+]
 ```
 
 ## Other important manifest aspects

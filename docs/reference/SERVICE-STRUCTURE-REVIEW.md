@@ -231,7 +231,7 @@ Most services follow this high-level shape:
 - `env`
 - `globalenv`
 - `depend_on`
-- `healthcheck`
+- `healthchecks`
 - `authentication`
 - `outputvarregex`
 - `urls`
@@ -262,7 +262,7 @@ Services explicitly declare dependency order.
 
 This is core and should survive.
 
-### Pattern 4 - `healthcheck`
+### Pattern 4 - `healthchecks[]`
 Services declare their runtime health expectations.
 
 This is core and should survive, but may need normalization.
@@ -491,7 +491,7 @@ The template repo should likely include:
 
 ### Optional
 - sample config
-- healthcheck probe script
+- healthchecks[] probe script
 - migration/setup scripts
 - platform-specific packaging helpers
 
