@@ -569,7 +569,10 @@ func TestForkChildAndStartChildTrackProcesses(t *testing.T) {
 }
 
 func TestRunServesHTTPAndClosesGracefully(t *testing.T) {
-	app := newTestHarnessApp(t)
+	app := newTestHarnessAppWithEnv(t, map[string]string{
+		"ECHO_HTTP_HEALTH_PORT": findFreePort(t),
+		"ECHO_TCP_PORT":         findFreePort(t),
+	})
 	app.port = findFreePort(t)
 
 	serverErrCh := make(chan error, 1)
@@ -616,10 +619,12 @@ func TestSubprocessCloseAndAbortFlows(t *testing.T) {
 		logPath, statePath, dbPath := makeTestPaths(t)
 		port := findFreePort(t)
 		command := startHarnessProcess(t, binary, map[string]string{
-			"ECHO_PORT":       port,
-			"ECHO_LOG_PATH":   logPath,
-			"ECHO_STATE_PATH": statePath,
-			"ECHO_DB_PATH":    dbPath,
+			"ECHO_PORT":             port,
+			"ECHO_LOG_PATH":         logPath,
+			"ECHO_STATE_PATH":       statePath,
+			"ECHO_DB_PATH":          dbPath,
+			"ECHO_HTTP_HEALTH_PORT": findFreePort(t),
+			"ECHO_TCP_PORT":         findFreePort(t),
 		})
 
 		baseURL := "http://127.0.0.1:" + port
@@ -648,10 +653,12 @@ func TestSubprocessCloseAndAbortFlows(t *testing.T) {
 		logPath, statePath, dbPath := makeTestPaths(t)
 		port := findFreePort(t)
 		command := startHarnessProcess(t, binary, map[string]string{
-			"ECHO_PORT":       port,
-			"ECHO_LOG_PATH":   logPath,
-			"ECHO_STATE_PATH": statePath,
-			"ECHO_DB_PATH":    dbPath,
+			"ECHO_PORT":             port,
+			"ECHO_LOG_PATH":         logPath,
+			"ECHO_STATE_PATH":       statePath,
+			"ECHO_DB_PATH":          dbPath,
+			"ECHO_HTTP_HEALTH_PORT": findFreePort(t),
+			"ECHO_TCP_PORT":         findFreePort(t),
 		})
 
 		baseURL := "http://127.0.0.1:" + port
@@ -691,14 +698,15 @@ func TestServiceManifestMatchesHarnessContract(t *testing.T) {
 	}
 
 	var manifest struct {
-		ID          string            `json:"id"`
-		Name        string            `json:"name"`
-		Executable  string            `json:"executable"`
-		Args        []string          `json:"args"`
-		Env         map[string]string `json:"env"`
-		Healthcheck struct {
+		ID           string            `json:"id"`
+		Name         string            `json:"name"`
+		Executable   string            `json:"executable"`
+		Args         []string          `json:"args"`
+		Env          map[string]string `json:"env"`
+		Healthchecks []struct {
+			ID   string `json:"id"`
 			Type string `json:"type"`
-		} `json:"healthcheck"`
+		} `json:"healthchecks"`
 	}
 	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
 		t.Fatalf("decode service.json failed: %v", err)
@@ -713,8 +721,14 @@ func TestServiceManifestMatchesHarnessContract(t *testing.T) {
 	if len(manifest.Args) != 2 || manifest.Args[0] != "run" || manifest.Args[1] != "." {
 		t.Fatalf("unexpected args: %#v", manifest.Args)
 	}
-	if manifest.Healthcheck.Type != "process" {
-		t.Fatalf("unexpected healthcheck type: %s", manifest.Healthcheck.Type)
+	if len(manifest.Healthchecks) != 1 {
+		t.Fatalf("expected one healthchecks[] item, got %d", len(manifest.Healthchecks))
+	}
+	if manifest.Healthchecks[0].ID != "process-ready" {
+		t.Fatalf("unexpected healthchecks[] id: %s", manifest.Healthchecks[0].ID)
+	}
+	if manifest.Healthchecks[0].Type != "process" {
+		t.Fatalf("unexpected healthchecks[] type: %s", manifest.Healthchecks[0].Type)
 	}
 	requiredEnv := []string{"ECHO_PORT", "ECHO_LOG_PATH", "ECHO_STATE_PATH", "ECHO_DB_PATH"}
 	requiredEnv = append(requiredEnv, "ECHO_HTTP_HEALTH_PORT", "ECHO_TCP_PORT")

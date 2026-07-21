@@ -33,7 +33,10 @@
       "kind": "local"
     }
   ],
-  "healthcheck": {
-    "type": "process"
-  }
+  "healthchecks": [
+    {
+      "id": "process-ready",
+      "type": "process"
+    }
+  ]
 }

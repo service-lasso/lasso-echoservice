@@ -163,7 +163,7 @@ This determines reserved ports, exposed URLs, and how service endpoints are desc
 
 ### F. Health/readiness
 Fields used include:
-- `healthcheck`
+- `healthchecks`
 
 This determines how the runtime checks whether a service is started/healthy.
 

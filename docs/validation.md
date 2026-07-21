@@ -11,7 +11,7 @@ Current validation direction:
 - local and CI usage should share the same harness contract path
 - the manifest still uses `process` as the primary health model, while the harness now also exposes dedicated HTTP and TCP health targets for future runtime tests
 
-Ref/code-backed donor healthcheck types observed:
+Ref/code-backed donor healthchecks[] types observed:
 - `http`
 - `tcp`
 - `file`

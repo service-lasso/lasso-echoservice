@@ -197,7 +197,7 @@ Current health-model direction:
 - default health model is **process**
 - other health models are allowed when explicitly declared by the service config
 
-Ref/code-backed donor healthcheck types observed:
+Ref/code-backed donor healthchecks[] types observed:
 - `http`
 - `tcp`
 - `file`
