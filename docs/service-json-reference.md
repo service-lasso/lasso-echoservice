@@ -1,10 +1,10 @@
 # service.json Reference
 
-_Status: first-pass reference_
+_Status: current package reference_
 
-This doc is the one-stop reference for the current `service.json` direction inside `service-template`.
+This doc is the package-level reference for the Echo Service `service.json` manifest.
 
-It is meant to make the template usable without forcing service authors to reconstruct the contract from scattered notes.
+The core Service Lasso repository owns the full schema. This page records the subset used by Echo Service and follows the canonical `endpoints[]` contract.
 
 ## What this doc covers
 
@@ -12,7 +12,7 @@ It is meant to make the template usable without forcing service authors to recon
 - common top-level fields
 - `actions`
 - `execconfig`
-- env / dependencies / ports
+- env, dependencies, and `endpoints[]`
 - `healthchecks[]` direction
 - examples
 - what is currently canonical vs still illustrative
@@ -42,53 +42,55 @@ At a high level it carries:
 - dependency hints
 - health expectations
 
-## Current sample manifest
+## Canonical endpoint authoring pattern
 
-The current sample in this repo is:
+The checked-in [`service.json`](../service.json) declares each listener as a network endpoint, feeds resolved ports into the existing `ECHO_*` environment variables, and declares operator-facing links as URL endpoints. A reduced example is:
 
 ```json
 {
   "id": "echo-service",
   "name": "Echo Service",
-  "description": "Minimal sample service used to prove the service-template contract.",
+  "description": "Go-based harness service used for Service Lasso integration, runtime hardening, and supervision testing.",
   "enabled": true,
-  "version": "0.1.0",
-  "logoutput": true,
-  "icon": "terminal",
-  "servicetype": 50,
-  "servicelocation": 10,
-  "actions": {
-    "install": {
-      "description": "Prepare the sample runtime payload if needed."
-    },
-    "config": {
-      "description": "Materialize effective runtime config for the sample service."
-    },
-    "start": {
-      "description": "Start the sample echo service."
-    },
-    "stop": {
-      "description": "Stop the sample echo service gracefully."
-    }
+  "version": "0.3.0",
+  "executable": "go",
+  "args": ["run", "."],
+  "env": {
+    "ECHO_PORT": "${endpoint.service.port}",
+    "ECHO_HTTP_HEALTH_PORT": "${endpoint.http_health.port}",
+    "ECHO_TCP_PORT": "${endpoint.tcp_health.port}"
   },
-  "execconfig": {
-    "serviceorder": 100,
-    "serviceport": 0,
-    "execcwd": "runtime",
-    "executable": "echo-service",
-    "env": {
-      "ECHO_MESSAGE": "hello from service-template"
+  "endpoints": [
+    {
+      "id": "service",
+      "kind": "network",
+      "transport": "tcp",
+      "protocol": "http",
+      "bind": "127.0.0.1",
+      "port": { "default": 4010, "strategy": "preferred" },
+      "exposure": "local",
+      "required": true,
+      "primary": true
     },
-    "depend_on": [],
-    "healthchecks": [
-      {
-        "id": "process-ready",
-        "type": "process"
-      }
-    ]
-  }
+    {
+      "id": "ui",
+      "kind": "url",
+      "target": "service",
+      "url": "http://${endpoint.service.bind}:${endpoint.service.port}/",
+      "exposure": "local",
+      "primary": true
+    }
+  ],
+  "healthchecks": [
+    {
+      "id": "process-ready",
+      "type": "process"
+    }
+  ]
 }
 ```
+
+The full manifest also declares the dedicated `http_health` and `tcp_health` network endpoints plus the `service_health` and `http_health_url` URL endpoints.
 
 ## Top-level fields
 
@@ -193,11 +195,6 @@ Example:
 ```json
 "serviceorder": 100
 ```
-
-### `serviceport`
-Primary service port.
-
-In the sample, `0` is being used as a simple first-pass placeholder/default meaning “no fixed service port required by this sample”.
 
 ### `execcwd`
 Execution working directory.
@@ -354,15 +351,16 @@ Current broader Service Lasso direction includes:
 
 The sample template keeps this minimal for now.
 
-### Ports and URLs
-Donor material shows additional fields such as:
-- `serviceportsecondary`
-- `serviceportconsole`
-- `serviceportdebug`
-- `portmapping`
-- `urls`
+### Endpoints
 
-These are not all used in the minimal sample, but they remain relevant for more complex services.
+Use top-level `endpoints[]` for every service interface or resource:
+
+- network listeners use `kind: "network"` with a named `id`, bind, protocol, and port policy
+- operator-facing links use `kind: "url"` and target their network endpoint
+- runtime variables resolve endpoint data with `${endpoint.<id>.<field>}` selectors
+- compatibility aliases, when required, stay in `env` or `globalenv`
+
+Do not author new manifests with legacy top-level `ports`, `portmapping`, or `urls`, or with donor-style `serviceport*` fields. Historical donor-analysis documents under `docs/reference/` may still name those fields when describing the source system.
 
 ### Runtime-provider relationships
 Donor material also shows patterns such as:
@@ -381,6 +379,7 @@ The minimal sample does not use this yet.
 - `execconfig` as the execution contract section
 - explicit `env`
 - explicit `depend_on`
+- canonical `endpoints[]` with `${endpoint.<id>.<field>}` selectors
 - default health model of `process`
 - explicit override to other health models when needed
 

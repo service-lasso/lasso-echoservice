@@ -14,7 +14,17 @@ Its job is to provide:
 - stdout and stderr emission actions for log-capture testing
 - durable log, state, and SQLite writes for persistence testing
 
-## Main endpoints
+## Manifest endpoints
+
+The package manifest declares three concrete listeners and resolves the existing runtime env variables from them:
+
+- `service` - main HTTP listener, default port `4010`
+- `http_health` - dedicated HTTP health listener, default port `4011`
+- `tcp_health` - dedicated TCP health listener, default port `4012`
+
+The `ui`, `service_health`, and `http_health_url` URL endpoints target those listeners. Service Lasso can resolve all of them through `${endpoint.<id>.<field>}` selectors without relying on legacy top-level `urls`, `ports`, or `portmapping` fields.
+
+## Main HTTP routes
 
 - `GET /`
 - `GET /health`

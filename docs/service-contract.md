@@ -17,6 +17,8 @@ It exists to support runtime integration, supervision, persistence, and demo ver
 
 Current harness-specific surfaces include:
 - dedicated HTTP and TCP health targets for realistic health-probe testing
+- canonical `endpoints[]` declarations for the main HTTP, dedicated HTTP health, and dedicated TCP health listeners
+- `${endpoint.<id>.<field>}` selectors that feed resolved listener ports into the existing `ECHO_*` runtime variables
 - env and global-env reporting endpoints
 - a Service Lasso oriented output endpoint at `GET /service-lasso/output`
 - stdout and stderr emission actions for log-capture testing
