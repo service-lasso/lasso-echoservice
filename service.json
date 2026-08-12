@@ -8,29 +8,88 @@
   "args": ["run", "."],
   "env": {
     "ECHO_MESSAGE": "hello from echo-service harness",
-    "ECHO_PORT": "4010",
-    "ECHO_HTTP_HEALTH_PORT": "4011",
-    "ECHO_TCP_PORT": "4012",
+    "ECHO_PORT": "${endpoint.service.port}",
+    "ECHO_HTTP_HEALTH_PORT": "${endpoint.http_health.port}",
+    "ECHO_TCP_PORT": "${endpoint.tcp_health.port}",
     "ECHO_LOG_PATH": "./runtime/echo.log",
     "ECHO_STATE_PATH": "./runtime/state.json",
     "ECHO_DB_PATH": "./runtime/echo.sqlite",
     "SERVICE_LASSO_GLOBAL_ENV_JSON": "{\"ECHO_ENV_CHANNEL\":\"demo\"}"
   },
-  "urls": [
+  "endpoints": [
     {
+      "id": "service",
+      "kind": "network",
+      "label": "Service HTTP",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "http",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4010,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true,
+      "primary": true
+    },
+    {
+      "id": "http_health",
+      "kind": "network",
+      "label": "Dedicated HTTP health",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "http",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4011,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "tcp_health",
+      "kind": "network",
+      "label": "Dedicated TCP health",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "tcp",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4012,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "ui",
+      "kind": "url",
       "label": "ui",
-      "url": "http://127.0.0.1:4010/",
-      "kind": "local"
+      "target": "service",
+      "url": "http://${endpoint.service.bind}:${endpoint.service.port}/",
+      "exposure": "local",
+      "required": true,
+      "primary": true
     },
     {
+      "id": "service_health",
+      "kind": "url",
       "label": "service",
-      "url": "http://127.0.0.1:4010/health",
-      "kind": "local"
+      "target": "service",
+      "url": "http://${endpoint.service.bind}:${endpoint.service.port}/health",
+      "exposure": "local",
+      "required": true
     },
     {
+      "id": "http_health_url",
+      "kind": "url",
       "label": "http-health",
-      "url": "http://127.0.0.1:4011/health",
-      "kind": "local"
+      "target": "http_health",
+      "url": "http://${endpoint.http_health.bind}:${endpoint.http_health.port}/health",
+      "exposure": "local",
+      "required": true
     }
   ],
   "healthchecks": [

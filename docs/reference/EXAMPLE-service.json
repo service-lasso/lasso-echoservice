@@ -1,41 +1,101 @@
 {
   "id": "echo-service",
   "name": "Echo Service",
-  "description": "Minimal sample service used to prove the service-template contract.",
+  "description": "Go-based harness service used for Service Lasso integration, runtime hardening, and supervision testing.",
+  "version": "0.3.0",
   "enabled": true,
-  "version": "0.1.0",
-  "logoutput": true,
-  "icon": "terminal",
-  "servicetype": 50,
-  "servicelocation": 10,
-  "actions": {
-    "install": {
-      "description": "Prepare the sample runtime payload if needed."
-    },
-    "config": {
-      "description": "Materialize effective runtime config for the sample service."
-    },
-    "start": {
-      "description": "Start the sample echo service."
-    },
-    "stop": {
-      "description": "Stop the sample echo service gracefully."
-    }
+  "executable": "go",
+  "args": ["run", "."],
+  "env": {
+    "ECHO_MESSAGE": "hello from echo-service harness",
+    "ECHO_PORT": "${endpoint.service.port}",
+    "ECHO_HTTP_HEALTH_PORT": "${endpoint.http_health.port}",
+    "ECHO_TCP_PORT": "${endpoint.tcp_health.port}",
+    "ECHO_LOG_PATH": "./runtime/echo.log",
+    "ECHO_STATE_PATH": "./runtime/state.json",
+    "ECHO_DB_PATH": "./runtime/echo.sqlite",
+    "SERVICE_LASSO_GLOBAL_ENV_JSON": "{\"ECHO_ENV_CHANNEL\":\"demo\"}"
   },
-  "execconfig": {
-    "serviceorder": 100,
-    "serviceport": 0,
-    "execcwd": "runtime",
-    "executable": "echo-service",
-    "env": {
-      "ECHO_MESSAGE": "hello from service-template"
+  "endpoints": [
+    {
+      "id": "service",
+      "kind": "network",
+      "label": "Service HTTP",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "http",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4010,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true,
+      "primary": true
     },
-    "depend_on": [],
-    "healthchecks": [
-      {
-        "id": "process-ready",
-        "type": "process"
-      }
-    ]
-  }
+    {
+      "id": "http_health",
+      "kind": "network",
+      "label": "Dedicated HTTP health",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "http",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4011,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "tcp_health",
+      "kind": "network",
+      "label": "Dedicated TCP health",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "tcp",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4012,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "ui",
+      "kind": "url",
+      "label": "ui",
+      "target": "service",
+      "url": "http://${endpoint.service.bind}:${endpoint.service.port}/",
+      "exposure": "local",
+      "required": true,
+      "primary": true
+    },
+    {
+      "id": "service_health",
+      "kind": "url",
+      "label": "service",
+      "target": "service",
+      "url": "http://${endpoint.service.bind}:${endpoint.service.port}/health",
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "http_health_url",
+      "kind": "url",
+      "label": "http-health",
+      "target": "http_health",
+      "url": "http://${endpoint.http_health.bind}:${endpoint.http_health.port}/health",
+      "exposure": "local",
+      "required": true
+    }
+  ],
+  "healthchecks": [
+    {
+      "id": "process-ready",
+      "type": "process"
+    }
+  ]
 }
