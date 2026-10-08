@@ -34,6 +34,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node for runnable examples
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+
+      - name: Verify runnable secret-file setup and checker
+        run: node --test examples/webdav/example.test.mjs
+
       - name: Package artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
