@@ -52,7 +52,7 @@ the resulting service launches the compiled binary and needs no Go installation.
    remote, redirected or not advancing. A successful initial run shows `loaded`,
    `sizeBytes: 46` and `reads: 2` for this exact demo value.
 
-5. Open **Secrets Broker → RAM files**, filter `echo-webdav`, then refresh.
+5. Open **Secrets Broker â†’ RAM files**, filter `echo-webdav`, then refresh.
    `demo-config.json` should show the same size and two completed downloads on
    an otherwise idle grant. Repeat the checker to see both counts advance.
    No credential content or capability token appears in these views.
@@ -80,3 +80,7 @@ credentials, declare a single-value file and use an app that reads that format.
 On Windows Echo converts the supplied UNC directory to loopback HTTP, so this
 sample needs neither drive mapping nor Windows WebClient setup. No direct Echo
 launch can provision the file: startup must go through Core and Broker.
+
+Secret outputs are declared in `broker.files`, without an `ephemeral` flag.
+Core `config.files` remains ordinary configuration beneath the service root.
+This example requires Core with service-lasso/service-lasso #1747 (SPEC-011 ESM-14).

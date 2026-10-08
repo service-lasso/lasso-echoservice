@@ -16,7 +16,8 @@ test('preparation produces a complete discoverable service and refuses overwriti
     assert.deepEqual(manifest.args, []);
     assert.equal(manifest.env.ECHO_SECRET_FILES_DIR, '${SERVICE_LASSO_SECRETS_DIR}');
     assert.equal(manifest.broker.imports[0].required, true);
-    assert.equal(manifest.config.files[0].ephemeral, true);
+    assert.equal(manifest.config, undefined);
+    assert.deepEqual(manifest.broker.files, [{ path: "demo-config.json", content: '{"demoCredential":"${echo.DEMO_CREDENTIAL}"}' }]);
     assert.equal(manifest.endpoints.filter(e => e.kind === 'network').length, 3);
     await assert.rejects(prepareEchoWebDAVService(root), { code: 'EEXIST' });
     assert.equal(await readFile(path.join(target, 'echo-secret-demo'), 'utf8'), 'synthetic test binary');

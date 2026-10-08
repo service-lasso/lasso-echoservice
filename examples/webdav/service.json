@@ -100,21 +100,18 @@
       "type": "process"
     }
   ],
-  "config": {
-    "files": [
-      {
-        "path": "demo-config.json",
-        "content": "{\"demoCredential\":\"${echo.DEMO_CREDENTIAL}\"}",
-        "ephemeral": true
-      }
-    ]
-  },
   "broker": {
     "imports": [
       {
         "namespace": "shared/echo",
         "ref": "echo.DEMO_CREDENTIAL",
         "required": true
+      }
+    ],
+    "files": [
+      {
+        "path": "demo-config.json",
+        "content": "{\"demoCredential\":\"${echo.DEMO_CREDENTIAL}\"}"
       }
     ]
   }
