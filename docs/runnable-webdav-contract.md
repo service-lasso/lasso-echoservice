@@ -10,3 +10,6 @@ printing credentials/paths. Execute actual Core/Broker/Echo provisioning on
 Ubuntu; retain positive/negative setup, access, read, replacement and stop proof.
 No source helper bootstraps insecure credentials or bypasses first-run Broker
 setup. Keep encrypted vault/runtime prerequisites explicit and link the lesson.
+
+Run the setup/check positive and negative tests in each existing platform CI job
+using Node 22, alongside the existing Go packaging, tests and harness checks.
