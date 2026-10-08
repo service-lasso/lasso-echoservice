@@ -16,6 +16,10 @@ Its job is to provide:
 
 ## Manifest endpoints
 
+The opt-in [RAM WebDAV example](docs/webdav-example.md) consumes Core-supplied
+secret files and provides safe read status at `/secret-file`.
+
+
 The package manifest declares three concrete listeners and resolves the existing runtime env variables from them:
 
 - `service` - main HTTP listener, default port `4010`

@@ -48,26 +48,27 @@ type eventRow struct {
 }
 
 type harnessSnapshot struct {
-	Service         string            `json:"service"`
-	PID             int               `json:"pid"`
-	Message         string            `json:"message"`
-	StartedAt       time.Time         `json:"startedAt"`
-	LastAction      string            `json:"lastAction"`
-	ActionCount     int               `json:"actionCount"`
-	LastError       string            `json:"lastError,omitempty"`
-	LogPath         string            `json:"logPath"`
-	StatePath       string            `json:"statePath"`
-	DatabasePath    string            `json:"databasePath"`
-	HTTPHealthPort  string            `json:"httpHealthPort"`
-	HTTPHealthURL   string            `json:"httpHealthUrl"`
-	HTTPHealthMode  string            `json:"httpHealthMode"`
-	TCPHealthPort   string            `json:"tcpHealthPort"`
-	TCPHealthAddr   string            `json:"tcpHealthAddress"`
-	TCPHealthMode   string            `json:"tcpHealthMode"`
-	GlobalEnv       map[string]string `json:"globalEnv"`
-	Children        []childProcess    `json:"children"`
-	RecentEvents    []eventRow        `json:"recentEvents"`
-	ShutdownMode    string            `json:"shutdownMode,omitempty"`
+	RAMSecretFile  ramFileReadStatus `json:"ramSecretFile"`
+	Service        string            `json:"service"`
+	PID            int               `json:"pid"`
+	Message        string            `json:"message"`
+	StartedAt      time.Time         `json:"startedAt"`
+	LastAction     string            `json:"lastAction"`
+	ActionCount    int               `json:"actionCount"`
+	LastError      string            `json:"lastError,omitempty"`
+	LogPath        string            `json:"logPath"`
+	StatePath      string            `json:"statePath"`
+	DatabasePath   string            `json:"databasePath"`
+	HTTPHealthPort string            `json:"httpHealthPort"`
+	HTTPHealthURL  string            `json:"httpHealthUrl"`
+	HTTPHealthMode string            `json:"httpHealthMode"`
+	TCPHealthPort  string            `json:"tcpHealthPort"`
+	TCPHealthAddr  string            `json:"tcpHealthAddress"`
+	TCPHealthMode  string            `json:"tcpHealthMode"`
+	GlobalEnv      map[string]string `json:"globalEnv"`
+	Children       []childProcess    `json:"children"`
+	RecentEvents   []eventRow        `json:"recentEvents"`
+	ShutdownMode   string            `json:"shutdownMode,omitempty"`
 }
 
 type actionRequest struct {
@@ -77,6 +78,8 @@ type actionRequest struct {
 }
 
 type harnessApp struct {
+	ramReadMu   sync.Mutex
+	ramFile     ramFileReadStatus
 	serviceName string
 	message     string
 	port        string
@@ -99,14 +102,14 @@ type harnessApp struct {
 	httpHealthMode healthMode
 	tcpHealthMode  healthMode
 
-	logFile         *os.File
-	db              *sql.DB
-	httpServer      *http.Server
+	logFile          *os.File
+	db               *sql.DB
+	httpServer       *http.Server
 	httpHealthServer *http.Server
-	tcpHealthLn     net.Listener
-	stopCh          chan string
-	stdout          io.Writer
-	stderr          io.Writer
+	tcpHealthLn      net.Listener
+	stopCh           chan string
+	stdout           io.Writer
+	stderr           io.Writer
 }
 
 func main() {
@@ -184,6 +187,7 @@ func newHarnessApp() (*harnessApp, error) {
 		return nil, err
 	}
 
+	app.refreshRAMFile()
 	return app, nil
 }
 
@@ -201,6 +205,7 @@ func (app *harnessApp) run() error {
 	mux.HandleFunc("/health/http", app.handleHTTPHealthStatus)
 	mux.HandleFunc("/health/tcp", app.handleTCPHealthStatus)
 	mux.HandleFunc("/state", app.handleState)
+	mux.HandleFunc("/secret-file", app.handleRAMFile)
 	mux.HandleFunc("/logs", app.handleLogs)
 	mux.HandleFunc("/sqlite", app.handleSQLite)
 	mux.HandleFunc("/env", app.handleEnv)
@@ -286,6 +291,7 @@ func (app *harnessApp) snapshot() harnessSnapshot {
 	globalEnv := cloneStringMap(app.globalEnv)
 
 	return harnessSnapshot{
+		RAMSecretFile:  app.ramFile,
 		Service:        app.serviceName,
 		PID:            os.Getpid(),
 		Message:        app.message,
@@ -476,9 +482,9 @@ func (app *harnessApp) handleEnv(w http.ResponseWriter, _ *http.Request) {
 func (app *harnessApp) handleGlobalEnv(w http.ResponseWriter, _ *http.Request) {
 	output := app.serviceLassoOutput()
 	app.writeJSON(w, http.StatusOK, map[string]any{
-		"service":    app.serviceName,
-		"globalEnv":  cloneStringMap(app.globalEnv),
-		"globalenv":  cloneStringMap(app.globalEnv),
+		"service":            app.serviceName,
+		"globalEnv":          cloneStringMap(app.globalEnv),
+		"globalenv":          cloneStringMap(app.globalEnv),
 		"serviceLassoOutput": output,
 	})
 }
@@ -903,15 +909,15 @@ func (app *harnessApp) closeHealthServers() {
 
 func (app *harnessApp) serviceEnv() map[string]string {
 	return map[string]string{
-		"ECHO_MESSAGE":           app.message,
-		"ECHO_PORT":              app.port,
-		"ECHO_LOG_PATH":          app.logPath,
-		"ECHO_STATE_PATH":        app.statePath,
-		"ECHO_DB_PATH":           app.dbPath,
-		"ECHO_HTTP_HEALTH_PORT":  app.httpHealthPort,
-		"ECHO_TCP_PORT":          app.tcpHealthPort,
-		"ECHO_HTTP_HEALTH_MODE":  string(app.currentHTTPHealthMode()),
-		"ECHO_TCP_HEALTH_MODE":   string(app.currentTCPHealthMode()),
+		"ECHO_MESSAGE":          app.message,
+		"ECHO_PORT":             app.port,
+		"ECHO_LOG_PATH":         app.logPath,
+		"ECHO_STATE_PATH":       app.statePath,
+		"ECHO_DB_PATH":          app.dbPath,
+		"ECHO_HTTP_HEALTH_PORT": app.httpHealthPort,
+		"ECHO_TCP_PORT":         app.tcpHealthPort,
+		"ECHO_HTTP_HEALTH_MODE": string(app.currentHTTPHealthMode()),
+		"ECHO_TCP_HEALTH_MODE":  string(app.currentTCPHealthMode()),
 	}
 }
 
@@ -1053,6 +1059,10 @@ func collectEnv() map[string]string {
 	for _, raw := range os.Environ() {
 		parts := strings.SplitN(raw, "=", 2)
 		if len(parts) == 2 {
+			if parts[0] == "ECHO_SECRET_FILES_DIR" || parts[0] == "SERVICE_LASSO_SECRETS_DIR" {
+				entries[parts[0]] = "[withheld RAM file capability]"
+				continue
+			}
 			entries[parts[0]] = parts[1]
 		}
 	}
