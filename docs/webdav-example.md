@@ -5,16 +5,10 @@ ephemeral `demo-config.json` resolving `echo.DEMO_CREDENTIAL` from the Broker
 namespace `shared/echo`. For a demonstration, create the Broker secret
 `shared/echo/echo.DEMO_CREDENTIAL` with value `synthetic-demo-credential` before
 starting. Its required scoped import fails launch if the secret is unavailable.
-Core renders it into Broker RAM and supplies `${SERVICE_LASSO_SECRETS_DIR}` as
+Broker resolves the scoped reference internally, provisions the file in RAM, returns its WebDAV directory, and Core supplies `${SERVICE_LASSO_SECRETS_DIR}` as
 `ECHO_SECRET_FILES_DIR`. Existing environment delivery continues to work.
 
-For source development, place that manifest beside `main.go` as `service.json`
-and discover/start that folder with Service Lasso, with Broker running. For a
-packaged service, retain its packaged executable/args and add the sample's
-`config.files` and `ECHO_SECRET_FILES_DIR` / `ECHO_SECRET_FILE_NAME` environment
-entries. Use the Echo build containing this consumer; older releases lack it.
-Replace the synthetic credential with an appropriate scoped SecretRef template
-for a real app; never place actual credentials in a checked-in manifest.
+Run the complete [setup and checker example](../examples/webdav/README.md).
 
 Echo reads and validates the JSON on startup. `GET /secret-file` reports only
 `status`, `sizeBytes`, `reads` and `lastReadAt`. `POST /secret-file` rereads the

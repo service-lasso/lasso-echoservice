@@ -4,11 +4,8 @@
   "description": "Go-based harness service used for Service Lasso integration, runtime hardening, and supervision testing.",
   "version": "0.3.0",
   "enabled": true,
-  "executable": "go",
-  "args": [
-    "run",
-    "."
-  ],
+  "executable": "./echo-secret-demo",
+  "args": [],
   "env": {
     "ECHO_MESSAGE": "hello from echo-service harness",
     "ECHO_PORT": "${endpoint.service.port}",
