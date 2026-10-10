@@ -69,7 +69,7 @@ its executable filename for the target OS. The Go implementation is
 `go test ./...`, and setup/check tests with
 `node --test examples/webdav/example.test.mjs`.
 
-`config.files[].ephemeral: true` requests file provisioning;
+`broker.files[]` requests file provisioning;
 `broker.imports` supplies allowed bindings. `${SERVICE_LASSO_SECRETS_DIR}` is the
 returned directory, not an on-disk working directory. Plain `_FILE` names are
 app conventions; choose variables your consumer understands. Explicit secrets
@@ -80,3 +80,7 @@ credentials, declare a single-value file and use an app that reads that format.
 On Windows Echo converts the supplied UNC directory to loopback HTTP, so this
 sample needs neither drive mapping nor Windows WebClient setup. No direct Echo
 launch can provision the file: startup must go through Core and Broker.
+
+Secret outputs are declared in `broker.files`, without an `ephemeral` flag.
+Core `config.files` remains ordinary configuration beneath the service root.
+This example requires Core with service-lasso/service-lasso #1747 (SPEC-011 ESM-14).
