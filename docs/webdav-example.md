@@ -1,7 +1,7 @@
 # Echo RAM file consumer (#12)
 
-The opt-in [sample manifest](../examples/webdav/service.json) declares an
-ephemeral `demo-config.json` resolving `echo.DEMO_CREDENTIAL` from the Broker
+The opt-in [sample manifest](../examples/webdav/service.json) declares
+`broker.files[]` output `demo-config.json`, resolving `echo.DEMO_CREDENTIAL` from the Broker
 namespace `shared/echo`. For a demonstration, create the Broker secret
 `shared/echo/echo.DEMO_CREDENTIAL` with value `synthetic-demo-credential` before
 starting. Its required scoped import fails launch if the secret is unavailable.
