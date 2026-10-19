@@ -47,6 +47,7 @@ func TestServiceManifestUsesCanonicalEndpoints(t *testing.T) {
 		"ECHO_PORT":             "${endpoint.service.port}",
 		"ECHO_HTTP_HEALTH_PORT": "${endpoint.http_health.port}",
 		"ECHO_TCP_PORT":         "${endpoint.tcp_health.port}",
+		"ECHO_FASTCGI_PORT":     "${endpoint.fastcgi.port}",
 	}
 	for key, expected := range expectedEnv {
 		if actual := manifest.Env[key]; actual != expected {
@@ -62,6 +63,7 @@ func TestServiceManifestUsesCanonicalEndpoints(t *testing.T) {
 		"service":     {port: 4010, protocol: "http"},
 		"http_health": {port: 4011, protocol: "http"},
 		"tcp_health":  {port: 4012, protocol: "tcp"},
+		"fastcgi":     {port: 4013, protocol: "tcp"},
 	}
 	expectedURLs := map[string]struct {
 		label  string
