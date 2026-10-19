@@ -12,6 +12,7 @@ import (
 	_ "modernc.org/sqlite"
 	"net"
 	"net/http"
+	"net/http/fcgi"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -86,6 +87,7 @@ type harnessApp struct {
 
 	httpHealthPort string
 	tcpHealthPort  string
+	fastcgiPort    string
 
 	startedAt time.Time
 	globalEnv map[string]string
@@ -104,6 +106,7 @@ type harnessApp struct {
 	httpServer      *http.Server
 	httpHealthServer *http.Server
 	tcpHealthLn     net.Listener
+	fastcgiLn       net.Listener
 	stopCh          chan string
 	stdout          io.Writer
 	stderr          io.Writer
@@ -169,6 +172,7 @@ func newHarnessApp() (*harnessApp, error) {
 		dbPath:         dbPath,
 		httpHealthPort: envOrDefault("ECHO_HTTP_HEALTH_PORT", "4011"),
 		tcpHealthPort:  envOrDefault("ECHO_TCP_PORT", "4012"),
+		fastcgiPort:    envOrDefault("ECHO_FASTCGI_PORT", "4013"),
 		startedAt:      time.Now().UTC(),
 		globalEnv:      collectGlobalEnv(),
 		logFile:        logFile,
@@ -219,6 +223,10 @@ func (app *harnessApp) run() error {
 	mux.HandleFunc("/action/start-child", app.handleStartChild)
 	mux.HandleFunc("/action/fork-child", app.handleForkChild)
 
+	if err := app.startFastCGI(); err != nil {
+		return err
+	}
+
 	app.httpServer = &http.Server{
 		Addr:              "127.0.0.1:" + app.port,
 		Handler:           mux,
@@ -255,6 +263,14 @@ func (app *harnessApp) shutdown(reason string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	app.mu.Lock()
+	fastcgiLn := app.fastcgiLn
+	app.fastcgiLn = nil
+	app.mu.Unlock()
+	if fastcgiLn != nil {
+		_ = fastcgiLn.Close()
+	}
 
 	if app.httpServer != nil {
 		_ = app.httpServer.Shutdown(shutdownCtx)
@@ -857,6 +873,34 @@ func (app *harnessApp) handleDedicatedHTTPHealth(w http.ResponseWriter, _ *http.
 	})
 }
 
+func (app *harnessApp) startFastCGI() error {
+	listener, err := net.Listen("tcp", "127.0.0.1:"+app.fastcgiPort)
+	if err != nil {
+		return fmt.Errorf("listen fastcgi server: %w", err)
+	}
+
+	app.mu.Lock()
+	app.fastcgiLn = listener
+	app.mu.Unlock()
+
+	go func() {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = io.WriteString(w, "hello from echo-service fastcgi\n")
+		})
+		if err := fcgi.Serve(listener, handler); err != nil && !errors.Is(err, net.ErrClosed) {
+			app.setLastError("fastcgi server: " + err.Error())
+		}
+		app.mu.Lock()
+		if app.fastcgiLn == listener {
+			app.fastcgiLn = nil
+		}
+		app.mu.Unlock()
+	}()
+
+	return nil
+}
+
 func (app *harnessApp) serveTCPHealth(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
@@ -910,6 +954,7 @@ func (app *harnessApp) serviceEnv() map[string]string {
 		"ECHO_DB_PATH":           app.dbPath,
 		"ECHO_HTTP_HEALTH_PORT":  app.httpHealthPort,
 		"ECHO_TCP_PORT":          app.tcpHealthPort,
+		"ECHO_FASTCGI_PORT":      app.fastcgiPort,
 		"ECHO_HTTP_HEALTH_MODE":  string(app.currentHTTPHealthMode()),
 		"ECHO_TCP_HEALTH_MODE":   string(app.currentTCPHealthMode()),
 	}

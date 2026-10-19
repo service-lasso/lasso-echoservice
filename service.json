@@ -11,6 +11,7 @@
     "ECHO_PORT": "${endpoint.service.port}",
     "ECHO_HTTP_HEALTH_PORT": "${endpoint.http_health.port}",
     "ECHO_TCP_PORT": "${endpoint.tcp_health.port}",
+    "ECHO_FASTCGI_PORT": "${endpoint.fastcgi.port}",
     "ECHO_LOG_PATH": "./runtime/echo.log",
     "ECHO_STATE_PATH": "./runtime/state.json",
     "ECHO_DB_PATH": "./runtime/echo.sqlite",
@@ -58,6 +59,21 @@
       "bind": "127.0.0.1",
       "port": {
         "default": 4012,
+        "strategy": "preferred"
+      },
+      "exposure": "local",
+      "required": true
+    },
+    {
+      "id": "fastcgi",
+      "kind": "network",
+      "label": "FastCGI",
+      "direction": "inbound",
+      "transport": "tcp",
+      "protocol": "tcp",
+      "bind": "127.0.0.1",
+      "port": {
+        "default": 4013,
         "strategy": "preferred"
       },
       "exposure": "local",
