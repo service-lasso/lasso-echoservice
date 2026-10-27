@@ -49,26 +49,26 @@ type eventRow struct {
 }
 
 type harnessSnapshot struct {
-	Service         string            `json:"service"`
-	PID             int               `json:"pid"`
-	Message         string            `json:"message"`
-	StartedAt       time.Time         `json:"startedAt"`
-	LastAction      string            `json:"lastAction"`
-	ActionCount     int               `json:"actionCount"`
-	LastError       string            `json:"lastError,omitempty"`
-	LogPath         string            `json:"logPath"`
-	StatePath       string            `json:"statePath"`
-	DatabasePath    string            `json:"databasePath"`
-	HTTPHealthPort  string            `json:"httpHealthPort"`
-	HTTPHealthURL   string            `json:"httpHealthUrl"`
-	HTTPHealthMode  string            `json:"httpHealthMode"`
-	TCPHealthPort   string            `json:"tcpHealthPort"`
-	TCPHealthAddr   string            `json:"tcpHealthAddress"`
-	TCPHealthMode   string            `json:"tcpHealthMode"`
-	GlobalEnv       map[string]string `json:"globalEnv"`
-	Children        []childProcess    `json:"children"`
-	RecentEvents    []eventRow        `json:"recentEvents"`
-	ShutdownMode    string            `json:"shutdownMode,omitempty"`
+	Service        string            `json:"service"`
+	PID            int               `json:"pid"`
+	Message        string            `json:"message"`
+	StartedAt      time.Time         `json:"startedAt"`
+	LastAction     string            `json:"lastAction"`
+	ActionCount    int               `json:"actionCount"`
+	LastError      string            `json:"lastError,omitempty"`
+	LogPath        string            `json:"logPath"`
+	StatePath      string            `json:"statePath"`
+	DatabasePath   string            `json:"databasePath"`
+	HTTPHealthPort string            `json:"httpHealthPort"`
+	HTTPHealthURL  string            `json:"httpHealthUrl"`
+	HTTPHealthMode string            `json:"httpHealthMode"`
+	TCPHealthPort  string            `json:"tcpHealthPort"`
+	TCPHealthAddr  string            `json:"tcpHealthAddress"`
+	TCPHealthMode  string            `json:"tcpHealthMode"`
+	GlobalEnv      map[string]string `json:"globalEnv"`
+	Children       []childProcess    `json:"children"`
+	RecentEvents   []eventRow        `json:"recentEvents"`
+	ShutdownMode   string            `json:"shutdownMode,omitempty"`
 }
 
 type actionRequest struct {
@@ -101,21 +101,22 @@ type harnessApp struct {
 	httpHealthMode healthMode
 	tcpHealthMode  healthMode
 
-	logFile         *os.File
-	db              *sql.DB
-	httpServer      *http.Server
+	logFile          *os.File
+	db               *sql.DB
+	httpServer       *http.Server
 	httpHealthServer *http.Server
-	tcpHealthLn     net.Listener
-	fastcgiLn       net.Listener
-	stopCh          chan string
-	stdout          io.Writer
-	stderr          io.Writer
+	tcpHealthLn      net.Listener
+	fastcgiLn        net.Listener
+	stopCh           chan string
+	stdout           io.Writer
+	stderr           io.Writer
 }
 
 func main() {
 	childMode := flag.Bool("child", false, "run as a child harness process")
 	oneShot := flag.Bool("one-shot", false, "write one event and exit")
 	childName := flag.String("child-name", "child", "child process name")
+	tuiMode := flag.Bool("tui", false, "run an interactive terminal dashboard alongside the service")
 	flag.Parse()
 
 	if *childMode {
@@ -130,6 +131,10 @@ func main() {
 	if err != nil {
 		log.Printf("echo-service failed to initialize: %v", err)
 		os.Exit(1)
+	}
+
+	if *tuiMode {
+		go app.runTUI()
 	}
 
 	if err := app.run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -492,9 +497,9 @@ func (app *harnessApp) handleEnv(w http.ResponseWriter, _ *http.Request) {
 func (app *harnessApp) handleGlobalEnv(w http.ResponseWriter, _ *http.Request) {
 	output := app.serviceLassoOutput()
 	app.writeJSON(w, http.StatusOK, map[string]any{
-		"service":    app.serviceName,
-		"globalEnv":  cloneStringMap(app.globalEnv),
-		"globalenv":  cloneStringMap(app.globalEnv),
+		"service":            app.serviceName,
+		"globalEnv":          cloneStringMap(app.globalEnv),
+		"globalenv":          cloneStringMap(app.globalEnv),
 		"serviceLassoOutput": output,
 	})
 }
@@ -947,16 +952,16 @@ func (app *harnessApp) closeHealthServers() {
 
 func (app *harnessApp) serviceEnv() map[string]string {
 	return map[string]string{
-		"ECHO_MESSAGE":           app.message,
-		"ECHO_PORT":              app.port,
-		"ECHO_LOG_PATH":          app.logPath,
-		"ECHO_STATE_PATH":        app.statePath,
-		"ECHO_DB_PATH":           app.dbPath,
-		"ECHO_HTTP_HEALTH_PORT":  app.httpHealthPort,
-		"ECHO_TCP_PORT":          app.tcpHealthPort,
-		"ECHO_FASTCGI_PORT":      app.fastcgiPort,
-		"ECHO_HTTP_HEALTH_MODE":  string(app.currentHTTPHealthMode()),
-		"ECHO_TCP_HEALTH_MODE":   string(app.currentTCPHealthMode()),
+		"ECHO_MESSAGE":          app.message,
+		"ECHO_PORT":             app.port,
+		"ECHO_LOG_PATH":         app.logPath,
+		"ECHO_STATE_PATH":       app.statePath,
+		"ECHO_DB_PATH":          app.dbPath,
+		"ECHO_HTTP_HEALTH_PORT": app.httpHealthPort,
+		"ECHO_TCP_PORT":         app.tcpHealthPort,
+		"ECHO_FASTCGI_PORT":     app.fastcgiPort,
+		"ECHO_HTTP_HEALTH_MODE": string(app.currentHTTPHealthMode()),
+		"ECHO_TCP_HEALTH_MODE":  string(app.currentTCPHealthMode()),
 	}
 }
 

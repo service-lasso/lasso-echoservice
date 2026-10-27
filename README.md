@@ -128,3 +128,9 @@ The `service-lasso` repo remains the core runtime and contract repo.
 This repo is the canonical home of the actual Echo Service implementation.
 
 `service-lasso` may still keep a thin local fixture manifest for `echo-service` so the core runtime test suite remains self-contained, but the service implementation itself now lives here.
+
+## Terminal dashboard
+
+`echo-service --tui` renders a full-screen terminal dashboard alongside the normal HTTP, health and FastCGI endpoints. It exists to test PTY attachment in Service Lasso: the process must be started on a real pseudo-terminal (for example with `service-lasso-pty`).
+
+Keys: `e` records a `tui-echo` event, `r` redraws, `q` shuts down cleanly. If stdin is not a TTY the dashboard is skipped and the service runs normally. Dashboard fields are reduced to printable text so log values cannot inject terminal control sequences.
