@@ -19,7 +19,16 @@ mkdir -p "$STAGING"
 
 (
   cd "$ROOT"
-  go build -o "$BINARY_PATH" .
+  if [ "$PLATFORM" = "darwin" ]; then
+    # The published darwin asset is consumed by both Apple silicon and Intel
+    # hosts, so build a universal binary instead of the runner architecture.
+    GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o "$STAGING/echo-service-amd64" .
+    GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o "$STAGING/echo-service-arm64" .
+    lipo -create -output "$BINARY_PATH" "$STAGING/echo-service-amd64" "$STAGING/echo-service-arm64"
+    rm -f "$STAGING/echo-service-amd64" "$STAGING/echo-service-arm64"
+  else
+    go build -o "$BINARY_PATH" .
+  fi
 )
 
 cp "$ROOT/service.json" "$STAGING/service.json"
